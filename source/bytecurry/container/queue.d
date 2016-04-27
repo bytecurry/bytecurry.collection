@@ -1,7 +1,6 @@
 module bytecurry.container.queue;
 
 import core.exception : RangeError;
-import std.exception : enforce;
 import std.range : put, isInputRange, ElementType;
 import std.traits : isImplicitlyConvertible;
 
@@ -30,22 +29,28 @@ struct Queue(T) {
     // Range operations:
     /**
      * Check if the queue is empty.
+     *
+     * Complexity: $(BIGOH 1)
      */
     @property bool empty() pure nothrow @safe const {
-        return _front is null;
+        return _data is null || _front is null;
     }
 
     /**
      * Peek at the first element of the queue.
+     *
+     * Complexity: $(BIGOH 1)
      */
     @property inout(T) front() pure @safe inout {
-        enforce!RangeError(_front);
+        assert(!empty, "Queue.front: Queue is empty");
         return _front.value;
     }
 
     /**
      * Moves the front out and returns it. Leaves `front` in a state
      * that does not allocate any resources.
+     *
+     * Complexity: $(BIGOH 1)
      */
     T moveFront() pure {
         import std.algorithm : move;
@@ -54,9 +59,11 @@ struct Queue(T) {
 
     /**
      * Pop the front element off of the queue
+     *
+     * Complexity: $(BIGOH 1)
      */
     void popFront() pure @safe {
-        enforce!RangeError(_front);
+        assert(!empty, "Queue.popFront: Queue is empty");
         _front = _front.next;
         if (_front is null) {
             _back = null;
@@ -87,7 +94,11 @@ struct Queue(T) {
      * emptied, those will be included in the saved range.
      */
     Range save() pure nothrow @safe {
-        return Range(_front);
+        if (empty) {
+            return Range(null);
+        } else {
+            return Range(_front);
+        }
     }
 
     /// ditto
@@ -97,6 +108,7 @@ struct Queue(T) {
      * Add a single element at the back of the queue.
      */
     void put(T element) pure nothrow @safe {
+        initialize();
         auto node = new Node(element);
         if (_back) {
             _back.next = node;
@@ -165,12 +177,12 @@ struct Queue(T) {
         }
 
         @property inout(T) front() pure @safe inout {
-            enforce!RangeError(node);
+            assert(node, "Queue.Range.front: Range is empty");
             return node.value;
         }
 
         void popFront() pure @safe {
-            enforce!RangeError(node);
+            assert(node, "Queue.Range.popFront: Range is empty");
             node = node.next;
         }
 
@@ -180,14 +192,14 @@ struct Queue(T) {
     }
 
     pure nothrow @safe invariant {
-        if (_front is null) {
-            assert(_back is null);
-        } else {
-            assert (_back !is null);
+        if (_data) {
+            if (_front is null) {
+                assert(_back is null);
+            } else {
+                assert (_back !is null);
+            }
         }
     }
-
-
 
 private:
 
@@ -196,8 +208,27 @@ private:
         Node* next;
     }
 
-    Node* _front;
-    Node* _back;
+    struct Data {
+        Node* front;
+        Node* back;
+    }
+
+    Data* _data;
+
+    @property ref inout(Node*) _front() inout pure nothrow @safe {
+        assert(_data);
+        return _data.front;
+    }
+    @property ref inout(Node*) _back() inout pure nothrow @safe {
+        assert(_data);
+        return _data.back;
+    }
+
+    void initialize() pure @safe {
+        if (!_data) {
+            _data = new Data();
+        }
+    }
 }
 
 ///
@@ -243,4 +274,16 @@ unittest {
 
     auto q = Queue!int(iota(1, 5));
     assert(equal(q, [1, 2, 3, 4]));
+}
+
+// test reference semantics
+unittest {
+    import std.algorithm : equal;
+
+    auto q1 = Queue!int(10, 20, 30);
+    auto q2 = q1;
+    q2.popFront();
+    assert(q1.front == 20);
+    q1.insert(67);
+    assert(equal(q2, [20, 30, 67]));
 }
