@@ -1,0 +1,6 @@
+name "bytecurry-container"
+description "A more complete container library for d. Complements std.container."
+copyright "Copyright © 2016, Thayne McCombs"
+authors "Thayne McCombs"
+license "MIT"
+targetType "library"
