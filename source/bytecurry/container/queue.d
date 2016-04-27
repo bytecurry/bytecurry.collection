@@ -15,7 +15,7 @@ struct Queue(T) {
      * Create a new queue that is pre-initialized with some elements.
      */
     this(U : T)(U[] elements...) pure @safe {
-        .put(this, elements);
+        put(elements);
     }
 
     /**
@@ -23,7 +23,7 @@ struct Queue(T) {
      */
     this(Stuff)(Stuff stuff) pure @safe
     if (isInputRange!Stuff && isImplicitlyConvertible!(ElementType!Stuff, T) && !is(Stuff == T[])) {
-        .put(this, stuff);
+        put(stuff);
     }
 
     // Range operations:
@@ -105,7 +105,7 @@ struct Queue(T) {
     alias opSlice = save;
 
     /**
-     * Add a single element at the back of the queue.
+     * Add an element or a range of elements at the back of the queue.
      */
     void put(T element) pure nothrow @safe {
         initialize();
@@ -117,6 +117,27 @@ struct Queue(T) {
         }
         _back = node;
     }
+
+    ///ditto
+    size_t put(Stuff)(Stuff stuff) pure nothrow @safe
+    if (isInputRange!Stuff && isImplicitlyConvertible!(ElementType!Stuff, T)) {
+        initialize();
+        size_t result;
+        Node* node, firstNode;
+        foreach (item; stuff) {
+            auto newNode = new Node(item);
+            (node ? node.next : firstNode) = newNode;
+            node = newNode;
+            result++;
+        }
+        if (_back) {
+            _back.next = firstNode;
+        } else {
+            _front = firstNode;
+        }
+        _back = node;
+        return result;
+    }
     /// ditto
     alias insert = put;
     /// ditto
@@ -127,6 +148,7 @@ struct Queue(T) {
     alias insertBack = put;
     /// ditto
     alias stableInsertBack = put;
+
 
     /**
      * Duplicate this queue
@@ -148,7 +170,7 @@ struct Queue(T) {
      */
     Queue opOpAssign(string op : "~", Stuff)(Stuff stuff) pure nothrow @safe
     if (isInputRange!Stuff && isImplicitlyConvertible!(ElementType!Stuff, T)) {
-        .put(this, stuff);
+        put(stuff);
         return this;
     }
 
