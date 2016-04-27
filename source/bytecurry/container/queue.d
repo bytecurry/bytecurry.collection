@@ -140,6 +140,14 @@ struct Queue(T) {
         return this;
     }
 
+    /**
+     * Clear the queue
+     */
+    void clear() pure nothrow @safe {
+        _front = null;
+        _back = null;
+    }
+
 
     /**
      * A saved view of the input side of the queue.
