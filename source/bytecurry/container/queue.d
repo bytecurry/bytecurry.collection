@@ -187,11 +187,10 @@ struct Queue(T) {
     bool opEquals(const ref Queue rhs) pure @safe const {
         if (_data is rhs._data) {
             return true;
-        } else if (empty) {
-            return rhs.empty;
-        } else if (rhs.empty){
+        } else if (_data is null || rhs._data is null) {
+            // one is null and the other isn't
             return false;
-        } else if (_front is rhs._front && _back is rhs._back) {
+        } else if (*_data == *rhs._data){
             return true;
         } else {
             // pointers are different, we need to iterate through the nodes;
