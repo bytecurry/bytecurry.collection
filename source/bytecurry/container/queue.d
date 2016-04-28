@@ -175,6 +175,39 @@ struct Queue(T) {
     }
 
     /**
+     * Comparison for equality.
+     *
+     * Complexity: $(BIGOH min(n, m)) where `m` is the number of elements in `rhs`
+     */
+    bool opEquals(const Queue rhs) pure @safe const {
+        return opEquals(rhs);
+    }
+
+    /// ditto
+    bool opEquals(const ref Queue rhs) pure @safe const {
+        if (_data is rhs._data) {
+            return true;
+        } else if (empty) {
+            return rhs.empty;
+        } else if (rhs.empty){
+            return false;
+        } else if (_front is rhs._front && _back is rhs._back) {
+            return true;
+        } else {
+            // pointers are different, we need to iterate through the nodes;
+            const(Node)* n1 = _front, n2 = rhs._front;
+            for (;; n1 = n1.next, n2 = n2.next) {
+                if (n1 is null) {
+                    return n2 is null;
+                }
+                if (!n2 || n1.value != n2.value) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    /**
      * Clear the queue
      */
     void clear() pure nothrow @safe {
@@ -308,4 +341,33 @@ unittest {
     assert(q1.front == 20);
     q1.insert(67);
     assert(equal(q2, [20, 30, 67]));
+}
+
+// test equality
+unittest {
+    Queue!int q1;
+    Queue!int q2;
+
+    assert(q1 == q1);
+    assert(q1 == q2);
+    q1.put(1);
+    assert(q1 != q2);
+    q2.put(1);
+    assert(q1 == q2);
+
+    Queue!int q3 = q1;
+    assert(q1 == q3);
+
+    q1.popFront();
+    assert(q1 == q3);
+    assert(q1 != q2);
+    q2.popFront();
+    assert(q1 == q2);
+
+    q1.put([1,2,3,4,5]);
+    q2.put([1,2,3,4]);
+    assert(q1 != q2);
+    assert(q2 != q1);
+    q2.put(5);
+    assert(q1 == q2);
 }
