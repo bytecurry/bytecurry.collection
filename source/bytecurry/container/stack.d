@@ -1,4 +1,4 @@
-module bytecurr.container.stack;
+module bytecurry.container.stack;
 
 import std.container.slist;
 import std.range : isInputRange;
