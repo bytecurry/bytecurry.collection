@@ -5,6 +5,8 @@ import std.container.slist;
 import std.range;
 import std.traits : isImplicitlyConvertible;
 
+import bytecurry.container.helpers : ApplyDefinitions;
+
 /**
  * Minimal interface for a stack.
  */
@@ -19,7 +21,7 @@ interface Stack(E) {
      */
     void removeFront();
     /// ditto
-    alias stableRemoveFront = popFront;
+    alias stableRemoveFront = removeFront;
 
     /**
      * Get the top element of the stack;
@@ -94,38 +96,13 @@ abstract class RichStack(E) : Stack!E, ForwardRange!E, OutputRange!E {
     }
 
     /**
-     * Default implementation of opSlice.
+     * Default implementation of opApply.
      * It calls empty, front, and removeFront.
      *
      * Implementations may want to override to avoid
      * virtual function calls.
      */
-    int opApply(int delegate(E) dg) {
-        int res;
-        while(!empty) {
-            res = dg(front);
-            if (res) {
-                return res;
-            }
-            removeFront();
-        }
-        return 0;
-    }
-
-    /// ditto
-    int opApply(int delegate(size_t, E) dg) {
-        int res;
-        size_t i;
-        while(!empty) {
-            res = dg(i, front);
-            if (res) {
-                return res;
-            }
-            i++;
-            removeFront();
-        }
-        return 0;
-    }
+    mixin ApplyDefinitions!(E, "empty", "front", "removeFront()");
 }
 
 /**

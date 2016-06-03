@@ -2,88 +2,133 @@ module bytecurry.container.queue;
 
 import core.exception : RangeError;
 import std.algorithm : move;
-import std.container.dlist : DList;
+import std.container: DList, make;
 import std.range;
 import std.traits : isImplicitlyConvertible;
 
+import bytecurry.container.helpers : ApplyDefinitions;
+
 /**
- * Interface for a FIFO queue container.
- * It is a ForwardRange, an OutputRange, and a container.
- *
- * Elements are added to the back and pulled from the front.
+ * Minimal interface for a queue.
  */
-interface Queue(E): ForwardRange!E, OutputRange!E {
+interface Queue(E) {
+    /**
+     * Check if the queue is empty.
+     */
+    bool empty() @property;
 
     /**
-     * Alias for popFront.
-     * A queue should support stably removing the front
-     * element.
+     * Look at the item at the front of the queue.
      */
-    alias removeFront = popFront;
-    /// ditto
-    alias stableRemoveFront = popFront;
+    E front() @property;
 
     /**
-     * Alias for save. Returns a range of the queue.
+     * Same as `front` but moves the item rather than copy it.
      */
-    alias opSlice = save;
+    E moveFront();
 
     /**
-     * `insert` is an alias for put, to store an element in the end of the
-     * queue.
+     * Remove the front element from the queue.
      */
-    alias insert = put;
+    void removeFront();
     /// ditto
-    alias stableInsert = put;
-    /// ditto
-    alias linearInsert = put;
-    /// ditto
-    alias insertBack = put;
-    /// ditto
-    alias stableInsertBack = put;
+    alias stableRemoveFront = removeFront;
 
     /**
-     * Remove the front element and return it.
-     * This function should be stable for ranges.
+     * Insert an element at the back of the queue.
      */
-    E removeAny();
+    size_t insertBack(E element);
     /// ditto
-    alias stableRemoveAny = removeAny;
-
-    /**
-     * Clear all elements from the queue.
-     */
-    void clear();
+    alias stableInsertBack = insertBack;
+    /// ditto
+    alias insert = insertBack;
+    /// ditto
+    alias stableInsert = insertBack;
+    /// ditto
+    alias linearInsert = insertBack;
 
     /**
      * Syntactic sugar for appending one or more elements.
      */
     final auto opOpAssign(string op : "~")(E element) {
-        put(element);
+        insertBack(element);
         return this;
     }
 
     /// ditto
     final auto opOpAssign(string op : "~", Stuff)(Stuff stuff)
-    if (isInputRange!Stuff && isImplicitlyConvertible!(ElementType!Stuff, E)) {
+    if (is(typeof({foreach(E el; stuff) {}}))) {
         foreach (el; stuff) {
-            put(el);
+            insertBack(el);
         }
         return this;
     }
+
+}
+
+/**
+ * Test if a type is a queue. That is, you can test if it is empty,
+ * remove the front element, look at the front element, and insert an item
+ * at the back.
+ * I.e. it defines `empty`, `front`, `removeFront`, and `insertBack`
+ */
+template isQueue(C) {
+    enum isQueue = is(typeof((inout int = 0) {
+                C c = C.init;
+                if (c.empty) {} // can test for empty
+                c.removeFront(); // can remove front
+                auto h = c.front; // can get front
+                c.insertBack(h); // can insert at back
+            }));
+}
+
+/**
+ * A richer interface for a queue.
+ * It makes a queue a forward range and an output range, and provides
+ * default implementations for several methods.
+ */
+abstract class RichQueue(E): Queue!E, ForwardRange!E, OutputRange!E {
+
+    abstract void clear();
+
+    /**
+     * Remove the front element of the queue and return it.
+     */
+    E removeAny() {
+        auto ret = moveFront();
+        removeFront();
+        return ret;
+    }
+
+    void popFront() {
+        removeFront();
+    }
+
+    void put(E element) {
+        insertBack(element);
+    }
+
+    /**
+     * Default implementation of opApply.
+     * It continually pops values off the front of the queue until
+     * the queue is empty.
+     *
+     * Implementation may want to override to avoid virtual function calls.
+     */
+    mixin ApplyDefinitions!(E, "empty", "front", "removeFront()");
 }
 
 /**
  * A simple queue type implemented with a single linked list.
  *
  */
-class SListQueue(E): Queue!E {
+class SListQueue(E): RichQueue!E {
 
     /**
      * Create a new queue that is pre-initialized with some elements.
      */
     this(U : E)(U[] elements...) {
-        put(elements);
+        insertBack(elements);
     }
 
     /**
@@ -91,7 +136,7 @@ class SListQueue(E): Queue!E {
      */
     this(Stuff)(Stuff stuff)
     if (isInputRange!Stuff && isImplicitlyConvertible!(ElementType!Stuff, E) && !is(Stuff == E[])) {
-        put(stuff);
+        insertBack(stuff);
     }
 
     // Range operations:
@@ -100,7 +145,7 @@ class SListQueue(E): Queue!E {
      *
      * Complexity: $(BIGOH 1)
      */
-    override bool empty() @property pure @safe nothrow const {
+    bool empty() @property pure @safe nothrow const {
         return  _front is null;
     }
 
@@ -109,7 +154,7 @@ class SListQueue(E): Queue!E {
      *
      * Complexity: $(BIGOH 1)
      */
-    override E front() @property {
+    E front() @property {
         assert(!empty, "Queue.front: Queue is empty");
         return _front.value;
     }
@@ -120,7 +165,7 @@ class SListQueue(E): Queue!E {
      *
      * Complexity: $(BIGOH 1)
      */
-    override E moveFront() {
+    E moveFront() {
         return move(_front.value);
     }
 
@@ -129,18 +174,12 @@ class SListQueue(E): Queue!E {
      *
      * Complexity: $(BIGOH 1)
      */
-    override void popFront() pure @safe {
+    void removeFront() pure @safe {
         assert(!empty, "Queue.popFront: Queue is empty");
         _front = _front.next;
         if (_front is null) {
             _back = null;
         }
-    }
-
-    override E removeAny() pure @safe {
-        auto result = move(_front.value);
-        popFront();
-        return result;
     }
 
     /**
@@ -149,7 +188,7 @@ class SListQueue(E): Queue!E {
      * but if additional items are pushed onto the queue before the range has been
      * emptied, those will be included in the saved range.
      */
-    override Range save() nothrow {
+    Range save() nothrow {
         if (empty) {
             return new Range(null);
         } else {
@@ -161,36 +200,14 @@ class SListQueue(E): Queue!E {
      * Iterate over the rest of the queue. Note that this consumes
      * the queue.
      */
-    override int opApply(int delegate(E) dg) {
-        int res;
-        while (_front) {
-            res = dg(_front.value);
-            if (res) {
-                return res;
-            }
-            _front = _front.next;
-        }
-        return 0;
-    }
-    /// ditto
-    override int opApply(int delegate(size_t, E) dg) {
-        int res;
-        size_t i;
-        while (_front) {
-            res = dg(i, _front.value);
-            if (res) {
-                return res;
-            }
-            _front = _front.next;
-            i++;
-        }
-        return 0;
+    override {
+        mixin ApplyDefinitions!(E, q{_front is null}, q{_front.value}, q{_front = _front.next});
     }
 
     /**
      * Add an element or a range of elements at the back of the queue.
      */
-    override void put(E element) pure nothrow @safe {
+    size_t insertBack(E element) pure nothrow @safe {
         auto node = new Node(element);
         if (_back) {
             _back.next = node;
@@ -198,12 +215,13 @@ class SListQueue(E): Queue!E {
             _front = node;
         }
         _back = node;
+        return 1;
     }
 
     /**
      * Optimization to insert multiple elements at a time.
      */
-    size_t put(Stuff)(Stuff stuff)
+    size_t insertBack(Stuff)(Stuff stuff)
     if (isInputRange!Stuff && isImplicitlyConvertible!(ElementType!Stuff, E)) {
         size_t result;
         Node* node, firstNode;
@@ -347,7 +365,7 @@ private:
 /**
  * Create a new queue that is pre-initialized with some elements.
  */
-Queue!E queue(E)(E[] elements...) pure @safe {
+RichQueue!E queue(E)(E[] elements...) pure @safe {
     return new SListQueue!E(elements);
 }
 
@@ -357,7 +375,7 @@ unittest {
     import std.range;
     import std.algorithm : equal;
 
-    Queue!int q = queue!int();
+    RichQueue!int q = queue!int();
     put(q, 1);
     put(q, 2);
     put(q, 3);
@@ -385,8 +403,8 @@ unittest {
     import std.algorithm : equal;
 
     auto q = queue(1,2,3,4,5);
-    assert(equal(q[], [1,2,3,4,5]));
-    assert(q.front == 1);
+    assert(equal(q, [1,2,3,4,5]));
+    assert(q.empty);
 }
 
 unittest {
@@ -411,8 +429,8 @@ unittest {
 
 // test equality
 unittest {
-    Queue!int q1 = queue!int();
-    Queue!int q2 = queue!int();
+    RichQueue!int q1 = queue!int();
+    RichQueue!int q2 = queue!int();
 
     assert(q1 == q1);
     assert(q1 == q2);
@@ -439,218 +457,71 @@ unittest {
 }
 
 /**
- * A Queue that wraps an input range that is also an output range.
- */
-template RangeQueue(R) if (isForwardRange!R && isOutputRange!(R, ElementType!R)) {
-    private alias E = ElementType!R;
-    static if (is(R: Queue!E)) {
-        alias RangeQueue = R;
-    } else {
-        class RangeQueue : Queue!E {
-            protected R _range;
-
-            this(R range) {
-                _range = range;
-            }
-
-            static if(is(typeof(R.init))) {
-                this() {
-                    _range = R.init;
-                }
-            }
-
-            // InputRange functions:
-
-            bool empty() @property {
-                return _range.empty;
-            }
-            E front() @property {
-                return _range.front;
-            }
-            void popFront() {
-                _range.popFront();
-            }
-            E moveFront() @property {
-                return .moveFront(_range);
-            }
-
-            int opApply(int delegate(E) dg) {
-                int res;
-                for (auto r = _range; !r.empty; r.popFront()) {
-                    res = dg(r.front);
-                    if (res != 0) {
-                        return res;
-                    }
-                }
-                return res;
-            }
-            int opApply(int delegate(size_t, E) dg) {
-                int res;
-                size_t i = 0;
-                for (auto r= _range; !r.empty; r.popFront(), i++) {
-                    res = dg(i, r.front);
-                    if (res != 0) {
-                        return res;
-                    }
-                }
-                return res;
-            }
-
-            //Forward Range function
-            static if (is(R: ForwardRange!E)) {
-                ForwardRange!E save() {
-                    return _range.save();
-                }
-            } else {
-                ForwardRange!E save() {
-                    return inputRangeObject(_range.save());
-                }
-            }
-
-            // Output Range functions
-            void put(E element) {
-                .put(_range, element);
-            }
-
-            //Other:
-
-            E removeAny() {
-                auto result = .moveFront(_range);
-                _range.popFront();
-                return result;
-            }
-
-            static if (is(typeof(_range.clear()))) {
-                void clear() {
-                    _range.clear();
-                }
-            } else {
-                void clear() {
-                    _range = R.init;
-                }
-            }
-
-        }
-    }
-}
-
-/**
- * Create a Queue wrapper around a Forward Range that is also an input range.
- */
-auto rangeQueue(R)(R range) {
-    return new RangeQueue!R(range);
-}
-
-/**
- * A queue backed by a dynamic array.
- * Note that this may reallocate the entire array
- * periodically.
- */
-class ArrayQueue(E): RangeQueue!(E[]) {
-    override void put(E element) {
-        _range ~= element;
-    }
-}
-
-///
-unittest {
-    auto q = new ArrayQueue!int();
-    q.put(5);
-    q.put(6);
-    assert(q.front == 5);
-    q.popFront();
-    assert(q.front == 6);
-    q.popFront();
-    assert(q.empty);
-}
-
-private template isQueueLike(C) {
-    enum isQueueLike = is(typeof((C c) {
-                if (!c.empty) {
-                    c.removeFront();
-                }
-                auto x = c.front;
-                c.insertBack(x);
-            })) && isForwardRange!(typeof(C.init.opSlice()));
-}
-
-/**
  * A Queue backed by a container with the following characteristics:
  * The following container methods are defined: `empty`, `front`, `removeFront`, `insertBack`,
  * and `opSlice` is defined and returns a forward range.
  */
-template ContainerQueue(C) if (isQueueLike!C) {
+template ContainerQueue(C) if (isQueue!C && isForwardRange!(typeof(C.init.opSlice()))) {
     private alias E = ElementType!C;
     static if (is(C: Queue!E)) {
         alias ContainerQueue = C;
     } else {
-        class ContainerQueue : Queue!E {
+        class ContainerQueue: RichQueue!E {
             protected C _container;
 
-            this(C container = C.init) {
+            this() {
+                _container = make!C();
+            }
+
+            this(E[] elements...) {
+                _container = make!C(elements);
+            }
+
+            this(C container) {
                 _container = container;
             }
 
-            override bool empty() @property {
+            bool empty() @property {
                 return _container.empty;
             }
 
-            override E front() @property {
+            E front() @property {
                 return _container.front;
             }
 
-            override void popFront() {
-                _container.removeFront();
-            }
-
-            override E moveFront() {
+            E moveFront() {
                 return .moveFront(_container);
             }
 
-            override ForwardRange!E save() {
+            void removeFront() {
+                _container.removeFront();
+            }
+
+            size_t insertBack(E element) {
+                auto ret = _container.insertBack(element);
+                static if(is(typeof(ret): size_t)) {
+                    return ret;
+                } else {
+                    return 1;
+                }
+            }
+
+
+            ForwardRange!E save() {
                 return inputRangeObject(_container.opSlice());
             }
 
-            int opApply(int delegate(E) dg) {
-                int res;
-                for(auto c = _container; !c.empty; c.removeFront()) {
-                    res = dg(c.front);
-                    if (res) {
-                        return res;
-                    }
-                }
-                return 0;
-            }
-            int opApply(int delegate(size_t, E) dg) {
-                int res;
-                size_t i;
-                for (auto c = _container; !c.empty; c.removeFront(), i++) {
-                    res = dg(i, c.front);
-                    if (res) {
-                        return res;
-                    }
-                }
-                return 0;
-            }
-
-            override void put(E element) {
-                _container.insertBack(element);
-            }
-
-            E removeAny() {
-                auto result = .moveFront(_container);
-                _container.removeFront();
-                return result;
-            }
-
-            static if (is(typeof(_container.clear()))) {
-                void clear() {
+            override void clear() {
+                static if (is(typeof(_container.clear()))) {
                     _container.clear();
+                } else {
+                    _container = make!C();
                 }
-            } else {
-                void clear() {
-                    _container = C.init;
-                }
+            }
+
+            override {
+                mixin ApplyDefinitions!(E, q{_container.empty}, q{_container.front},
+                                        q{_container.removeFront()});
             }
 
             static if (is(typeof(_container.dup))) {
