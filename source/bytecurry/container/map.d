@@ -5,6 +5,9 @@ import std.range : ForwardRange;
 
 alias MapEntry(K, V) = Tuple!(K, "key", V, "value");
 
+/**
+ * Interface for a Map. That is a mapping from keys to values.
+ */
 interface Map(K, V)
 {
 
@@ -33,6 +36,21 @@ interface Map(K, V)
      * Set the value for a key.
      */
     void opIndexAssign(V value, K key);
+
+    /**
+     * Insert a Key-Value pair into the Map.
+     * If a value already exists for the key, replace it.
+     */
+    void insert(Entry entry);
+
+    /// ditto
+    final void insert(Tuple!(K, V) entry)
+    {
+        opIndexAssign(entry[1], entry[0]);
+    }
+
+    /// ditto
+    alias put = insert;
 
     /**
      * Returns: A pointer to the value for `key`, or null if it doesn't exist.
@@ -76,6 +94,9 @@ interface Map(K, V)
      */
     ForwardRange!Entry byKeyValue() @property;
 
+    /// ditto
+    alias byPair = byKeyValue;
+
     /**
      * Loop over the keys and values of the Map. This is may be more efficient than
      * iterating over `byKeyValue`.
@@ -116,6 +137,11 @@ class AAMap(K, V) : Map!(K, V)
     void opIndexAssign(V value, K key)
     {
         aa[key] = value;
+    }
+
+    void insert(Entry entry)
+    {
+        aa[entry.key] = entry.value;
     }
 
     inout(V)* getPtr(K key) inout
@@ -231,4 +257,17 @@ unittest
 
     map.clear();
     assert(map.empty);
+
+    map.insert(mapEntry("b", 4));
+    assert(map["b"] == 4);
+    map.insert(mapEntry("b", 1));
+    assert(map["b"] == 1);
+}
+
+/**
+ * Convenience function to create a MapEntry.
+ */
+MapEntry!(K, V) mapEntry(K, V)(K key, V value) pure @nogc nothrow
+{
+    return MapEntry!(K, V)(key, value);
 }
