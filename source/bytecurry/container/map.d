@@ -20,7 +20,7 @@ interface Map(K, V)
     /**
      * Check if the map is empty.
      */
-    bool empty() const @property;
+    bool empty() @property;
 
     /**
      * Clear all elements from the Map
@@ -30,7 +30,7 @@ interface Map(K, V)
     /**
      * Get the value for a key.
      */
-    inout(V) opIndex(K key) inout;
+    V opIndex(K key);
 
     /**
      * Set the value for a key.
@@ -53,14 +53,9 @@ interface Map(K, V)
     alias put = insert;
 
     /**
-     * Returns: A pointer to the value for `key`, or null if it doesn't exist.
-     */
-    inout(V)* getPtr(K key) inout;
-
-    /**
      * Get a value by key, or a defalt if the value is missing.
      */
-    inout(V) get(K key, lazy V defaultVal) inout;
+    V get(K key, lazy inout(V) defaultVal);
 
     /**
      * Remove the key (and its value) from the map.
@@ -74,9 +69,9 @@ interface Map(K, V)
      */
     bool contains(K key) const;
 
-    final inout(V)* opBinaryRight(string op: "in")(K key) inout
+    final bool opBinaryRight(string op: "in")(K key)
     {
-        return getPtr(key);
+        return contains(key);
     }
 
     /**
@@ -111,12 +106,18 @@ interface Map(K, V)
  */
 class AAMap(K, V) : Map!(K, V)
 {
-    this()
-    {
-    }
+    this() pure {}
     this(V[K] data)
     {
         aa = data;
+    }
+
+    this(Entry[] entries...) pure
+    {
+        foreach (entry; entries)
+        {
+            aa[entry.key] = entry.value;
+        }
     }
 
     bool empty() const @property
@@ -129,7 +130,12 @@ class AAMap(K, V) : Map!(K, V)
         aa.clear();
     }
 
-    inout(V) opIndex(K key) inout
+    V opIndex(K key)
+    {
+        return aa[key];
+    }
+
+    inout(V) opIndex(const(K) key) inout
     {
         return aa[key];
     }
@@ -149,7 +155,12 @@ class AAMap(K, V) : Map!(K, V)
         return key in aa;
     }
 
-    inout(V) get(K key, lazy V defaultVal) inout
+    V get(K key, lazy inout(V) defVal)
+    {
+        return aa.get(key, defVal);
+    }
+
+    inout(V) get(K key, lazy inout(V) defaultVal) inout
     {
         return aa.get(key, defaultVal);
     }
@@ -218,14 +229,14 @@ unittest
     map["a"] = 5;
     assert(map["a"] == 5);
     assert(map.contains("a"));
-    assert(*("a" in map) == 5);
+    assert("a" in map);
     assert(map.get("a", 0) == 5);
     assert(!map.empty);
 
     map.remove("a");
     assert(map.empty);
     assert(!map.contains("a"));
-    assert(("a" in map) is null);
+    assert("a" !in map);
 
     map["a"] = 1;
     map["b"] = 2;
